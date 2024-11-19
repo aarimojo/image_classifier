@@ -8,3 +8,4 @@ pytest
 redis
 tensorflow
 protobuf
+loguru

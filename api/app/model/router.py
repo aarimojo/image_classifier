@@ -9,12 +9,14 @@ from app.model.schema import PredictRequest, PredictResponse
 from app.model.services import model_predict
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
+from loguru import logger
 
 router = APIRouter(tags=["Model"], prefix="/model")
 
 
 @router.post("/predict")
 async def predict(file: UploadFile, current_user=Depends(get_current_user)):
+    logger.info(f"Predicting image: {file.filename}")
     rpse = {"success": False, "prediction": None, "score": None}
     # To correctly implement this endpoint you should:
     #   1. Check a file was sent and that file is an image, see `allowed_file()` from `utils.py`.
@@ -30,22 +32,32 @@ async def predict(file: UploadFile, current_user=Depends(get_current_user)):
     rpse["score"] = None
     rpse["image_file_name"] = None
 
-    if not utils.allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail="File type is not supported.")
-    
-    file_hash = await utils.get_file_hash(file)
-    if os.path.exists(os.path.join(config.UPLOAD_FOLDER, file_hash)):
+    try:
+        if not utils.allowed_file(file.filename):
+            logger.error(f"File type is not supported: {file.filename}")
+            raise HTTPException(status_code=400, detail="File type is not supported.")
+        
+        file_hash = await utils.get_file_hash(file)
+        logger.debug(f"File hash: {file_hash}")
+        
+        await file.seek(0)
+        file_path = os.path.join(config.UPLOAD_FOLDER, file_hash)
+        logger.debug(f"Saving file to: {file_path}")
+        
+        with open(file_path, "wb") as f:
+            f.write(await file.read())
+        
+        logger.info("File saved, sending to model service")
+        prediction, score = await model_predict(file_hash)
+        logger.info(f"Got prediction: {prediction}, score: {score}")
+        
+        rpse["prediction"] = prediction
+        rpse["score"] = score
         rpse["image_file_name"] = file_hash
+        rpse["success"] = True
+        
         return PredictResponse(**rpse)
-    
-    await file.seek(0)
-    with open(os.path.join(config.UPLOAD_FOLDER, file_hash), "wb") as f:
-        f.write(await file.read())
-
-    prediction, score = await model_predict(file_hash)
-    rpse["prediction"] = prediction
-    rpse["score"] = score
-    rpse["image_file_name"] = file_hash
-    rpse["success"] = True
-
-    return PredictResponse(**rpse)
+        
+    except Exception as e:
+        logger.exception(f"Error in predict endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

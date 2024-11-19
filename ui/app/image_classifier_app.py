@@ -4,6 +4,9 @@ import requests
 import streamlit as st
 from app.settings import API_BASE_URL
 from PIL import Image
+from loguru import logger
+
+# logger.add("image_classifier_app.log", level="DEBUG")
 
 
 def login(username: str, password: str) -> Optional[str]:
@@ -30,8 +33,27 @@ def login(username: str, password: str) -> Optional[str]:
     #  6. If successful, extract the token from the JSON response.
     #  7. Return the token if login is successful, otherwise return `None`.
     #  8. Test the function with various inputs.
-
-    return None
+    logger.info(f"Logging in with username: {username} and password: {password}")
+    response = requests.post(
+        f"{API_BASE_URL}/login",
+        headers={
+            "accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data={
+            "grant_type": "password",
+            "username": username,
+            "password": password,
+            "scope": "api",
+            "client_id": "none",
+            "client_secret": "none",
+        },
+    )
+    logger.info(f"Login response: {response.json()}")
+    if response.status_code == 200:
+        return response.json().get("access_token")
+    else:
+        return None
 
 
 def predict(token: str, uploaded_file: Image) -> requests.Response:
@@ -52,7 +74,26 @@ def predict(token: str, uploaded_file: Image) -> requests.Response:
     #  2. Add the token to the headers.
     #  3. Make a POST request to the predict endpoint.
     #  4. Return the response.
-    response = None
+    logger.info(f"Predicting image: {uploaded_file.name}")
+    logger.info(f"Calling predict endpoint {API_BASE_URL}/predict")
+    uploaded_file.seek(0)
+    files = {
+        "file": (
+            uploaded_file.name,
+            uploaded_file.getvalue(),
+            uploaded_file.type
+        )
+    }
+    logger.info(f"Files byte size: {len(files['file'][1])}")
+    response = requests.post(
+        f"{API_BASE_URL}/model/predict",
+        headers={"Authorization": f"Bearer {token}"},
+        files=files
+    )
+    logger.info(f"Request body length: {len(response.request.body)}")
+    logger.info(f"Response status: {response.status_code}")
+    logger.info(f"Response headers: {response.headers}")
+    logger.info(f"Response body: {response.text}")
 
     return response
 
@@ -80,8 +121,19 @@ def send_feedback(
     # 2. Add the token to the headers.
     # 3. Make a POST request to the feedback endpoint.
     # 4. Return the response.
-    response = None
-
+    feedback_data = {
+        "feedback": feedback,
+        "score": score,
+        "prediction": prediction,
+        "image_file_name": image_file_name,
+    }
+    logger.info(f"Sending feedback: {feedback_data}")
+    response = requests.post(
+        f"{API_BASE_URL}/feedback",
+        headers={"Authorization": f"Bearer {token}"},
+        json=feedback_data,
+    )
+    logger.info(f"Feedback response: {response.json()}")
     return response
 
 
@@ -114,7 +166,7 @@ if "token" in st.session_state:
     # Cargar imagen
     uploaded_file = st.file_uploader("Sube una imagen", type=["jpg", "jpeg", "png"])
 
-    print(type(uploaded_file))
+    logger.info(f"Uploaded file type: {type(uploaded_file)}")
 
     # Mostrar imagen escalada si se ha cargado
     if uploaded_file is not None:
@@ -127,16 +179,21 @@ if "token" in st.session_state:
     # Botón de clasificación
     if st.button("Classify"):
         if uploaded_file is not None:
+            logger.info(f"Uploaded file: {uploaded_file}")
             response = predict(token, uploaded_file)
             if response.status_code == 200:
                 result = response.json()
+                logger.info(f"Prediction: {result['prediction']}")
+                logger.info(f"Score: {result['score']}")
                 st.write(f"**Prediction:** {result['prediction']}")
                 st.write(f"**Score:** {result['score']}")
                 st.session_state.classification_done = True
                 st.session_state.result = result
             else:
+                logger.error(f"Error classifying image. Status code: {response.status_code}")
                 st.error("Error classifying image. Please try again.")
         else:
+            logger.warning("Please upload an image before classifying.")
             st.warning("Please upload an image before classifying.")
 
     # Mostrar campo de feedback solo si se ha clasificado la imagen
@@ -145,6 +202,7 @@ if "token" in st.session_state:
         feedback = st.text_area("If the prediction was wrong, please provide feedback.")
         if st.button("Send Feedback"):
             if feedback:
+                logger.info(f"Sending feedback: {feedback}")
                 token = st.session_state.token
                 result = st.session_state.result
                 score = result["score"]
@@ -154,11 +212,13 @@ if "token" in st.session_state:
                     token, feedback, score, prediction, image_file_name
                 )
                 if response.status_code == 201:
+                    logger.info("Feedback sent successfully")
                     st.success("Thanks for your feedback!")
                 else:
+                    logger.error("Error sending feedback. Please try again.")
                     st.error("Error sending feedback. Please try again.")
             else:
-                st.warning("Please provide feedback before sending.")
+                logger.warning("Please provide feedback before sending.")
                 st.warning("Please provide feedback before sending.")
 
     # Pie de página

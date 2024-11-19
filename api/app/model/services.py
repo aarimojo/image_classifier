@@ -1,7 +1,7 @@
 import json
 import time
 from uuid import uuid4
-
+from loguru import logger
 import redis
 
 from .. import settings
@@ -49,8 +49,9 @@ async def model_predict(image_name):
     #    "image_name": str,
     # }
     # TODO
-    job_data = {"id": job_id, "image_name": image_name}
-
+    # job_data = {"id": job_id, "image_name": image_name}
+    job_data = [job_id, image_name]
+    logger.info(f"Job data: {job_data}")
     # Send the job to the model service using Redis
     # Hint: Using Redis `lpush()` function should be enough to accomplish this.
     # TODO
