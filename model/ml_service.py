@@ -16,12 +16,11 @@ os.environ['KERAS_HOME'] = '/root/.keras'
 # TODO
 # Connect to Redis and assign to variable `db``
 # Make use of settings.py module to get Redis settings like host, port, etc.
-# db = redis.Redis(
-#     port=settings.REDIS_PORT,
-#     db=settings.REDIS_DB_ID,
-#     host=settings.REDIS_IP,
-# )
-db = None
+db = redis.Redis(
+    port=settings.REDIS_PORT,
+    db=settings.REDIS_DB_ID,
+    host=settings.REDIS_IP,
+)
 
 # TODO
 # Load your ML model and assign to variable `model`
@@ -113,22 +112,22 @@ def classify_process():
         # Take a new job from Redis
         
         
-        # job = db.brpop(settings.REDIS_QUEUE)
-        # # Decode the JSON data for the given job
-        # job_data = json.loads(job[1])
-        # # Important! Get and keep the original job ID
-        # job_id = job_data[0]
-        # image_name = job_data[1]
-        # # Run the loaded ml model (use the predict() function)
-        # class_name, pred_probability = predict(image_name)
-        # # Prepare a new JSON with the results
-        # output = {"prediction": class_name, "score": pred_probability}
+        job = db.brpop(settings.REDIS_QUEUE)
+        # Decode the JSON data for the given job
+        job_data = json.loads(job[1])
+        # Important! Get and keep the original job ID
+        job_id = job_data[0]
+        image_name = job_data[1]
+        # Run the loaded ml model (use the predict() function)
+        class_name, pred_probability = predict(image_name)
+        # Prepare a new JSON with the results
+        output = {"prediction": class_name, "score": pred_probability}
 
-        # # Store the job results on Redis using the original
-        # # job ID as the key
-        # db.set(job_id, json.dumps(output))
-        # # Sleep for a bit
-        # time.sleep(settings.SERVER_SLEEP)
+        # Store the job results on Redis using the original
+        # job ID as the key
+        db.set(job_id, json.dumps(output))
+        # Sleep for a bit
+        time.sleep(settings.SERVER_SLEEP)
 
 
 if __name__ == "__main__":

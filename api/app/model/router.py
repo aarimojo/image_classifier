@@ -30,4 +30,22 @@ async def predict(file: UploadFile, current_user=Depends(get_current_user)):
     rpse["score"] = None
     rpse["image_file_name"] = None
 
+    if not utils.allowed_file(file.filename):
+        raise HTTPException(status_code=400, detail="File type is not supported.")
+    
+    file_hash = await utils.get_file_hash(file)
+    if os.path.exists(os.path.join(config.UPLOAD_FOLDER, file_hash)):
+        rpse["image_file_name"] = file_hash
+        return PredictResponse(**rpse)
+    
+    await file.seek(0)
+    with open(os.path.join(config.UPLOAD_FOLDER, file_hash), "wb") as f:
+        f.write(await file.read())
+
+    prediction, score = await model_predict(file_hash)
+    rpse["prediction"] = prediction
+    rpse["score"] = score
+    rpse["image_file_name"] = file_hash
+    rpse["success"] = True
+
     return PredictResponse(**rpse)
