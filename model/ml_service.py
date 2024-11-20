@@ -74,6 +74,14 @@ def predict(image_name):
             return None, None
         # TODO: Implement the code to predict the class of the image_name
 
+        try:
+            prediction = db.get(image_name)
+            if prediction:
+                logger.info("Prediction found in Redis, returning results...")
+                prediction = json.loads(prediction)
+                return prediction["class"], prediction["score"]
+        except:
+            logger.info("Prediction not found in Redis, loading from disk...")
         # Load image
         image_path = os.path.join(settings.UPLOAD_FOLDER, image_name)
         logger.info(f"Loading image from path: {image_path}")
@@ -97,6 +105,12 @@ def predict(image_name):
         logger.info("Predictions decoded, converting probabilities to float...")
         pred_probability = round(float(pred_probability), 4)
         logger.info("Probabilities converted to float, returning results...")
+        try:
+            # store the prediction in Redis in a separate queue that will be used to speed up retrieval in case of a repeated file
+            db.set(image_name, json.dumps({"class": class_name, "score": pred_probability}))
+        except Exception as e:
+            logger.error(f"Error storing prediction in Redis: {e}")
+            
         return class_name, pred_probability
     except Exception as e:
         logger.error(f"Error predicting image: {e}")

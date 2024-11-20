@@ -43,20 +43,88 @@ def login(username: str, password: str) -> Optional[str]:
 
 class APIUser(HttpUser):
     wait_time = between(1, 5)
+    token = None
 
     # Put your stress tests here.
     # See https://docs.locust.io/en/stable/writing-a-locustfile.html for help.
     # TODO
     # raise NotImplementedError
-    @task(1)
+    def on_start(self):
+        """Login once when the test starts"""
+        self.token = login("admin@example.com", "admin")
+
+    @task(1)  # Lower weight for the predict endpoint as it's more resource-intensive
     def predict(self):
-        token = login("admin@example.com", "admin")
+        """Test the predict endpoint with image upload"""
+        if not self.token:
+            return
+
+        headers = {"Authorization": f"Bearer {self.token}"}
         files = [("file", ("dog.jpeg", open("dog.jpeg", "rb"), "image/jpeg"))]
-        headers = {"Authorization": f"Bearer {token}"}
-        payload = {}
+        
         self.client.post(
-            "http://0.0.0.0:8000/model/predict",
+            "http://localhost:8000/model/predict",
             headers=headers,
-            data=payload,
+            files=files,
+        )
+    
+    @task(2)
+    def predict_multiple_same_request(self):
+        """Test the predict endpoint with multiple image uploads"""
+        if not self.token:
+            return
+
+        headers = {"Authorization": f"Bearer {self.token}"}
+        files = [
+            ("file", ("dog.jpeg", open("dog.jpeg", "rb"), "image/jpeg")),
+            ("file", ("0a7c757a80f2c5b13fa7a2a47a683593.jpeg", open("0a7c757a80f2c5b13fa7a2a47a683593.jpeg", "rb"), "image/jpeg")),
+            ("file", ("0f036a47557e3f1f89d299175e85ae3e.png", open("0f036a47557e3f1f89d299175e85ae3e.png", "rb"), "image/jpeg")),
+            ("file", ("6f37e6df23de9f5a4fb8801c1853b459.jpg", open("6f37e6df23de9f5a4fb8801c1853b459.jpeg", "rb"), "image/jpeg")),
+            ("file", ("a13694e7d1f586ae3ecbf7edfaefd3f6.jpg", open("a13694e7d1f586ae3ecbf7edfaefd3f6.jpg", "rb"), "image/jpeg")),
+        ]
+        
+        self.client.post(
+            "http://localhost:8000/model/predict",
+            headers=headers,
+            files=files,
+        )
+
+    @task(3)
+    def predict_multiple_different_request(self):
+        """Test the predict endpoint with multiple image uploads"""
+        if not self.token:
+            return
+
+        headers = {"Authorization": f"Bearer {self.token}"}
+        files = [
+            ("file", ("dog.jpeg", open("dog.jpeg", "rb"), "image/jpeg")),
+            ("file", ("0a7c757a80f2c5b13fa7a2a47a683593.jpeg", open("0a7c757a80f2c5b13fa7a2a47a683593.jpeg", "rb"), "image/jpeg")),
+            ("file", ("0f036a47557e3f1f89d299175e85ae3e.png", open("0f036a47557e3f1f89d299175e85ae3e.png", "rb"), "image/jpeg")),
+            ("file", ("6f37e6df23de9f5a4fb8801c1853b459.jpg", open("6f37e6df23de9f5a4fb8801c1853b459.jpeg", "rb"), "image/jpeg")),
+            ("file", ("a13694e7d1f586ae3ecbf7edfaefd3f6.jpg", open("a13694e7d1f586ae3ecbf7edfaefd3f6.jpg", "rb"), "image/jpeg")),
+        ]
+        
+        for file in files:
+            self.client.post(
+                "http://localhost:8000/model/predict",
+                headers=headers,
+                files=[file],
+            )
+
+    @task(10)
+    def predict_with_repeated_file_different_name(self):
+        """Test the predict endpoint with a repeated file but with a different name"""
+        if not self.token:
+            return
+        
+        headers = {"Authorization": f"Bearer {self.token}"}
+        files = [
+            ("file", ("dog.jpeg", open("dog.jpeg", "rb"), "image/jpeg")),
+            ("file", ("0a7c757a80f2c5b13fa7a2a47a683593.jpeg", open("0a7c757a80f2c5b13fa7a2a47a683593.jpeg", "rb"), "image/jpeg")),
+        ]
+        
+        self.client.post(
+            "http://localhost:8000/model/predict",
+            headers=headers,
             files=files,
         )
